@@ -60,6 +60,28 @@
   .entry-del { float: right; background: none; border: 0; color: var(--ink-2); font: inherit;
                font-size: 13px; text-decoration: underline; cursor: pointer; padding: 2px; }
   .empty { color: var(--ink-2); font-size: 14px; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row2 .label { margin-top: 0; }
+  select { width: 100%; font: inherit; font-size: 16px; color: var(--ink); border: 1px solid var(--line);
+           border-radius: 10px; padding: 10px 12px; background: #fff; }
+  .picker-toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 11px 12px; font: inherit;
+    font-size: 15px; color: var(--ink); cursor: pointer; text-align: left; }
+  .picker-toggle .sum { color: var(--ink-2); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: right; }
+  .picker-panel { margin-top: 8px; }
+  .scores { display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px;
+            -webkit-overflow-scrolling: touch; }
+  .score { flex: 0 0 auto; min-width: 42px; scroll-snap-align: start; }
+  details.day { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; background: #fff; }
+  details.day > summary { cursor: pointer; padding: 11px 12px; font-weight: 600; font-size: 15px; list-style: none;
+    display: flex; justify-content: space-between; align-items: center; }
+  details.day > summary::-webkit-details-marker { display: none; }
+  .day-count { font-size: 12px; font-weight: 600; color: var(--teal); border: 1px solid var(--teal);
+               border-radius: 999px; padding: 0 8px; }
+  .day-body { padding: 0 12px 4px; }
+  li.entry { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: 10px 0; margin: 0; }
+  .entry-time { display: inline-block; font-size: 12px; color: var(--ink-2); margin-bottom: 2px; }
   footer { font-size: 12px; color: var(--ink-2); margin-top: 20px; }
 </style>
 </head>
@@ -68,17 +90,27 @@
   <header>
     <h1>Body journal</h1>
     <span class="tag">Prototype</span>
-    <p class="intro">Pick where it hurts, write a note, save. Your entries are listed below so you can find them again later.</p>
+    <p class="intro">Pick where it hurts, write a note, save. Entries are grouped by day below.</p>
   </header>
 
   <section aria-labelledby="qe">
     <h2 id="qe">Quick entry</h2>
-    <label class="label" for="date">Date</label>
-    <input id="date" type="date">
-    <span class="label">Where is it? Pick as many as you need.</span>
-    <div id="regions"></div>
-    <p class="picked" id="picked" hidden></p>
-    <span class="label">Pain score (optional): 0 none, 10 worst</span>
+    <div class="row2">
+      <div>
+        <label class="label" for="date">Date</label>
+        <input id="date" type="date">
+      </div>
+      <div>
+        <label class="label" for="tod">Time of day</label>
+        <select id="tod"></select>
+      </div>
+    </div>
+    <span class="label">Where is it?</span>
+    <button type="button" class="picker-toggle" id="ptoggle" aria-expanded="false" aria-controls="regions">
+      <span>Body areas</span><span class="sum" id="psum">Tap to choose</span>
+    </button>
+    <div class="picker-panel" id="regions" hidden></div>
+    <span class="label">Pain score (optional): 0 none, 10 worst. Swipe for more.</span>
     <div class="scores" id="scores" role="group" aria-label="Pain score from 0 to 10"></div>
     <label class="label" for="note">What do you notice?</label>
     <textarea id="note" rows="3" maxlength="500" placeholder="e.g. Dull ache since this morning, worse after sitting"></textarea>
@@ -99,7 +131,7 @@
     <button class="btn btn-ghost" id="clear" hidden>Clear all entries</button>
   </section>
 
-  <footer>Prototype built 23 Oct 2026. Nothing here is sent anywhere.</footer>
+  <footer>Prototype updated 24 Oct 2026. Nothing here is sent anywhere.</footer>
 </main>
 
 <script>
@@ -117,7 +149,9 @@
   var entries = load();
   var areas = [], pain = null, confirmClear = false;
   var $ = function (id) { return document.getElementById(id); };
-  var dateEl = $("date"), noteEl = $("note"), saveEl = $("save"), pickedEl = $("picked");
+  var dateEl = $("date"), todEl = $("tod"), noteEl = $("note"), saveEl = $("save");
+  var TODS = [["early-morning","Early morning"],["late-morning","Late morning"],["early-afternoon","Early afternoon"],["late-afternoon","Late afternoon"],["evening","Evening"],["night","Night"]];
+  var openDays = {}, panelOpen = false, seeded = false;
 
   function load() {
     try {
@@ -149,8 +183,25 @@
     saveEl.disabled = !(areas.length > 0 && dateEl.value !== "" && noteEl.value.trim() !== "");
   }
   function renderPicked() {
-    pickedEl.hidden = areas.length === 0;
-    pickedEl.textContent = areas.length ? "Selected: " + areas.join(", ") : "";
+    $("psum").textContent = areas.length ? areas.length + " selected: " + areas.join(", ") : "Tap to choose";
+  }
+  function todLabel(k) {
+    for (var i = 0; i < TODS.length; i++) if (TODS[i][0] === k) return TODS[i][1];
+    return "";
+  }
+  function todRank(k) {
+    for (var i = 0; i < TODS.length; i++) if (TODS[i][0] === k) return i;
+    return TODS.length;
+  }
+  function nowTod() {
+    var h = new Date().getHours();
+    return h < 5 ? "night" : h < 9 ? "early-morning" : h < 12 ? "late-morning" : h < 15 ? "early-afternoon" : h < 18 ? "late-afternoon" : h < 21 ? "evening" : "night";
+  }
+  function renderTod() {
+    TODS.forEach(function (t) {
+      var o = document.createElement("option"); o.value = t[0]; o.textContent = t[1]; todEl.appendChild(o);
+    });
+    todEl.value = nowTod();
   }
   function renderRegions() {
     var host = $("regions");
@@ -217,33 +268,67 @@
     list.innerHTML = "";
     $("empty").hidden = entries.length > 0;
     $("clear").hidden = entries.length === 0;
+    var days = [], byDate = {};
     entries.forEach(function (e) {
-      var li = document.createElement("li");
-      li.className = "entry";
-      var del = document.createElement("button");
-      del.type = "button"; del.className = "entry-del"; del.textContent = "Delete";
-      del.addEventListener("click", function () {
-        entries = entries.filter(function (x) { return x.id !== e.id; });
-        persist(); renderList();
+      if (!byDate[e.date]) { byDate[e.date] = []; days.push(e.date); }
+      byDate[e.date].push(e);
+    });
+    days.sort(function (a, b) { return b.localeCompare(a); });
+    if (!seeded && days.length) { openDays[days[0]] = true; seeded = true; }
+    days.forEach(function (d) {
+      var items = byDate[d].slice().sort(function (x, y) {
+        var r = todRank(x.time) - todRank(y.time);
+        return r !== 0 ? r : String(x.savedAt || "").localeCompare(String(y.savedAt || ""));
       });
-      var main = document.createElement("span");
-      main.className = "entry-areas"; main.textContent = e.areas.join(", ");
-      li.appendChild(del); li.appendChild(main);
-      if (e.pain !== null && typeof e.pain === "number") {
-        var ps = document.createElement("span");
-        ps.className = "entry-pain"; ps.textContent = "Pain " + e.pain + "/10";
-        li.appendChild(ps);
-      }
-      var note = document.createElement("span");
-      note.className = "entry-note"; note.textContent = e.note;
-      var when = document.createElement("span");
-      when.className = "entry-when"; when.textContent = fmt(e.date);
-      li.appendChild(note); li.appendChild(when);
-      list.appendChild(li);
+      var det = document.createElement("details");
+      det.className = "day"; det.open = !!openDays[d];
+      det.addEventListener("toggle", function () { openDays[d] = det.open; });
+      var sum = document.createElement("summary");
+      var t = document.createElement("span"); t.textContent = fmt(d);
+      var c = document.createElement("span"); c.className = "day-count";
+      c.textContent = items.length + (items.length === 1 ? " entry" : " entries");
+      sum.appendChild(t); sum.appendChild(c); det.appendChild(sum);
+      var body = document.createElement("ul"); body.className = "day-body entries";
+      items.forEach(function (e) {
+        var li = document.createElement("li");
+        li.className = "entry";
+        var del = document.createElement("button");
+        del.type = "button"; del.className = "entry-del"; del.textContent = "Delete";
+        del.addEventListener("click", function () {
+          entries = entries.filter(function (x) { return x.id !== e.id; });
+          persist(); renderList();
+        });
+        li.appendChild(del);
+        var tl = todLabel(e.time);
+        var when = document.createElement("span");
+        when.className = "entry-time"; when.textContent = tl || "Time not set";
+        li.appendChild(when);
+        li.appendChild(document.createElement("br"));
+        var main = document.createElement("span");
+        main.className = "entry-areas"; main.textContent = e.areas.join(", ");
+        li.appendChild(main);
+        if (e.pain !== null && typeof e.pain === "number") {
+          var ps = document.createElement("span");
+          ps.className = "entry-pain"; ps.textContent = "Pain " + e.pain + "/10";
+          li.appendChild(ps);
+        }
+        var note = document.createElement("span");
+        note.className = "entry-note"; note.textContent = e.note;
+        li.appendChild(note);
+        body.appendChild(li);
+      });
+      det.appendChild(body);
+      list.appendChild(det);
     });
     $("clear").textContent = confirmClear ? "Tap again to erase all entries" : "Clear all entries";
   }
   dateEl.value = today();
+  renderTod();
+  $("ptoggle").addEventListener("click", function () {
+    panelOpen = !panelOpen;
+    $("regions").hidden = !panelOpen;
+    $("ptoggle").setAttribute("aria-expanded", String(panelOpen));
+  });
   dateEl.addEventListener("input", refreshSave);
   noteEl.addEventListener("input", refreshSave);
   saveEl.addEventListener("click", function () {
@@ -253,14 +338,14 @@
       areas: areas.slice(),
       note: noteEl.value.trim(),
       date: dateEl.value,
+      time: todEl.value,
       pain: pain,
       savedAt: new Date().toISOString()
     };
-    entries = [entry].concat(entries).sort(function (x, y) {
-      return y.date === x.date ? y.savedAt.localeCompare(x.savedAt) : y.date.localeCompare(x.date);
-    });
+    entries = [entry].concat(entries);
+    openDays[entry.date] = true;
     persist();
-    areas = []; pain = null; noteEl.value = "";
+    areas = []; pain = null; noteEl.value = ""; todEl.value = nowTod();
     renderRegions(); renderScores(); renderPicked(); renderList(); refreshSave();
   });
   $("clear").addEventListener("click", function () {
@@ -273,3 +358,4 @@
 </script>
 </body>
 </html>
+
