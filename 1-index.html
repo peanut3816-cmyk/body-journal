@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6f4f1">
+<title>Body journal (prototype)</title>
+<style>
+  :root {
+    --ink: #1e1c1a; --ink-2: #6b6560; --paper: #f6f4f1; --card: #ffffff;
+    --line: #e3ded8; --teal: #146b5d; --teal-soft: #e3efec; --warn-bg: #faf3e7; --warn-ink: #6b4e16;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 48px; }
+  header h1 { font-size: 24px; margin: 8px 0 2px; }
+  .tag { display: inline-block; font-size: 12px; color: var(--ink-2); border: 1px solid var(--line);
+         border-radius: 999px; padding: 1px 10px; background: var(--card); }
+  .intro { color: var(--ink-2); font-size: 14px; margin: 6px 0 20px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+            padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+  input[type="date"], textarea { width: 100%; font: inherit; font-size: 16px; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
+  textarea { resize: vertical; }
+  .region { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+  .region-head { width: 100%; display: flex; justify-content: space-between; align-items: center;
+    background: #fbfaf8; border: 0; padding: 12px; font: inherit; font-size: 15px; font-weight: 600;
+    color: var(--ink); cursor: pointer; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px 12px; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 12px;
+          font: inherit; font-size: 14px; color: var(--ink); cursor: pointer; }
+  .chip.on { background: var(--teal-soft); border-color: var(--teal); color: var(--teal); font-weight: 600; }
+  .scores { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .score { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 0;
+           font: inherit; font-size: 15px; color: var(--ink); cursor: pointer; }
+  .score.on { background: var(--teal-soft); border-color: var(--teal); color: var(--teal); font-weight: 700; }
+  .picked { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; }
+  .btn { display: inline-block; border: 0; border-radius: 10px; padding: 12px 18px; font: inherit;
+         font-size: 15px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: var(--ink); color: #fff; width: 100%; margin-top: 14px; }
+  .btn-primary:disabled { opacity: 0.35; cursor: default; }
+  .btn-ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line);
+               font-size: 13px; padding: 8px 12px; }
+  .hint { font-size: 13px; color: var(--ink-2); margin: 10px 0 0; }
+  .callout { background: var(--warn-bg); color: var(--warn-ink); border-radius: 12px;
+             padding: 12px 14px; font-size: 13px; margin-bottom: 16px; }
+  .callout b { display: block; margin-bottom: 4px; }
+  ul.entries { list-style: none; margin: 0; padding: 0; }
+  li.entry { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .entry-areas { font-weight: 600; font-size: 15px; }
+  .entry-pain { display: inline-block; font-size: 12px; color: var(--teal); font-weight: 600;
+                border: 1px solid var(--teal); border-radius: 999px; padding: 0 8px; margin-left: 8px; }
+  .entry-note { display: block; font-size: 14px; margin-top: 2px; }
+  .entry-when { display: block; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+  .entry-del { float: right; background: none; border: 0; color: var(--ink-2); font: inherit;
+               font-size: 13px; text-decoration: underline; cursor: pointer; padding: 2px; }
+  .empty { color: var(--ink-2); font-size: 14px; }
+  footer { font-size: 12px; color: var(--ink-2); margin-top: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Body journal</h1>
+    <span class="tag">Prototype</span>
+    <p class="intro">Pick where it hurts, write a note, save. Your entries are listed below so you can find them again later.</p>
+  </header>
+
+  <section aria-labelledby="qe">
+    <h2 id="qe">Quick entry</h2>
+    <label class="label" for="date">Date</label>
+    <input id="date" type="date">
+    <span class="label">Where is it? Pick as many as you need.</span>
+    <div id="regions"></div>
+    <p class="picked" id="picked" hidden></p>
+    <span class="label">Pain score (optional): 0 none, 10 worst</span>
+    <div class="scores" id="scores" role="group" aria-label="Pain score from 0 to 10"></div>
+    <label class="label" for="note">What do you notice?</label>
+    <textarea id="note" rows="3" maxlength="500" placeholder="e.g. Dull ache since this morning, worse after sitting"></textarea>
+    <button class="btn btn-primary" id="save" disabled>Save entry</button>
+    <p class="hint">Entries are saved in this browser on this device and stay after you close or reload the page.</p>
+  </section>
+
+  <div class="callout">
+    <b>Prototype, not medical advice</b>
+    Try it with made-up entries, not real health details. Entries are saved only in this browser
+    on this device. Clearing the browser's website data erases them. Nothing is uploaded or sent anywhere.
+  </div>
+
+  <section aria-labelledby="se">
+    <h2 id="se">Saved entries</h2>
+    <p class="empty" id="empty">Nothing saved yet. Add a fictional entry above to try the flow.</p>
+    <ul class="entries" id="list"></ul>
+    <button class="btn btn-ghost" id="clear" hidden>Clear all entries</button>
+  </section>
+
+  <footer>Prototype built 23 Oct 2026. Nothing here is sent anywhere.</footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var LS_KEY = "body-journal.entries.v2";
+  var REGIONS = [
+    { label: "Head and neck", parts: [["Head",0],["Face",0],["Jaw",1],["Neck (front)",0],["Neck (back)",0]] },
+    { label: "Shoulders and arms", parts: [["Shoulder",1],["Upper arm",1],["Elbow",1],["Forearm",1],["Wrist",1],["Hand",1],["Fingers",1]] },
+    { label: "Chest, belly and back", parts: [["Chest",0],["Ribs",1],["Upper belly",0],["Lower belly",0],["Upper back",0],["Mid back",0],["Lower back",0]] },
+    { label: "Hips and legs", parts: [["Hip",1],["Buttock",1],["Groin",1],["Thigh",1],["Knee",1],["Calf",1],["Shin",1]] },
+    { label: "Feet", parts: [["Ankle",1],["Top of foot",1],["Arch",1],["Heel",1],["Toes",1]] },
+    { label: "Other", parts: [["Whole body",0],["Somewhere else",0]] }
+  ];
+  var entries = load();
+  var areas = [], pain = null, confirmClear = false;
+  var $ = function (id) { return document.getElementById(id); };
+  var dateEl = $("date"), noteEl = $("note"), saveEl = $("save"), pickedEl = $("picked");
+
+  function load() {
+    try {
+      var raw = window.localStorage.getItem(LS_KEY);
+      if (!raw) return [];
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(function (e) {
+        return e && typeof e.id === "string" && Array.isArray(e.areas) &&
+               typeof e.note === "string" && typeof e.date === "string";
+      });
+    } catch (err) { return []; }
+  }
+  function persist() {
+    try { window.localStorage.setItem(LS_KEY, JSON.stringify(entries)); } catch (err) {}
+  }
+  function today() {
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + m + "-" + day;
+  }
+  function fmt(ymd) {
+    var p = ymd.split("-").map(Number);
+    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString("en-NZ",
+      { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  }
+  function refreshSave() {
+    saveEl.disabled = !(areas.length > 0 && dateEl.value !== "" && noteEl.value.trim() !== "");
+  }
+  function renderPicked() {
+    pickedEl.hidden = areas.length === 0;
+    pickedEl.textContent = areas.length ? "Selected: " + areas.join(", ") : "";
+  }
+  function renderRegions() {
+    var host = $("regions");
+    host.innerHTML = "";
+    REGIONS.forEach(function (r) {
+      var box = document.createElement("div");
+      box.className = "region";
+      var head = document.createElement("button");
+      head.type = "button"; head.className = "region-head"; head.setAttribute("aria-expanded", "false");
+      var label = document.createElement("span");
+      var sign = document.createElement("span"); sign.textContent = "+"; sign.setAttribute("aria-hidden", "true");
+      head.appendChild(label); head.appendChild(sign);
+      var chips = document.createElement("div");
+      chips.className = "chips"; chips.hidden = true;
+      function renderHead() {
+        var count = areas.filter(function (n) {
+          return r.parts.some(function (p) {
+            return p[1] ? n === "Left " + p[0].toLowerCase() || n === "Right " + p[0].toLowerCase() : n === p[0];
+          });
+        }).length;
+        label.textContent = r.label + (count > 0 ? " (" + count + " selected)" : "");
+      }
+      renderHead();
+      head.addEventListener("click", function () {
+        chips.hidden = !chips.hidden;
+        head.setAttribute("aria-expanded", String(!chips.hidden));
+        sign.textContent = chips.hidden ? "+" : "−";
+      });
+      r.parts.forEach(function (p) {
+        var names = p[1] ? ["Left " + p[0].toLowerCase(), "Right " + p[0].toLowerCase()] : [p[0]];
+        names.forEach(function (name) {
+          var c = document.createElement("button");
+          c.type = "button"; c.className = "chip"; c.textContent = name;
+          c.setAttribute("aria-pressed", String(areas.indexOf(name) >= 0));
+          if (areas.indexOf(name) >= 0) c.classList.add("on");
+          c.addEventListener("click", function () {
+            var i = areas.indexOf(name);
+            if (i >= 0) areas.splice(i, 1); else areas.push(name);
+            c.classList.toggle("on");
+            c.setAttribute("aria-pressed", String(areas.indexOf(name) >= 0));
+            renderHead(); renderPicked(); refreshSave();
+          });
+          chips.appendChild(c);
+        });
+      });
+      box.appendChild(head); box.appendChild(chips);
+      host.appendChild(box);
+    });
+  }
+  function renderScores() {
+    var host = $("scores");
+    host.innerHTML = "";
+    for (var n = 0; n <= 10; n++) (function (n) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "score"; b.textContent = n;
+      b.setAttribute("aria-pressed", String(pain === n));
+      if (pain === n) b.classList.add("on");
+      b.addEventListener("click", function () { pain = (pain === n ? null : n); renderScores(); });
+      host.appendChild(b);
+    })(n);
+  }
+  function renderList() {
+    var list = $("list");
+    list.innerHTML = "";
+    $("empty").hidden = entries.length > 0;
+    $("clear").hidden = entries.length === 0;
+    entries.forEach(function (e) {
+      var li = document.createElement("li");
+      li.className = "entry";
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "entry-del"; del.textContent = "Delete";
+      del.addEventListener("click", function () {
+        entries = entries.filter(function (x) { return x.id !== e.id; });
+        persist(); renderList();
+      });
+      var main = document.createElement("span");
+      main.className = "entry-areas"; main.textContent = e.areas.join(", ");
+      li.appendChild(del); li.appendChild(main);
+      if (e.pain !== null && typeof e.pain === "number") {
+        var ps = document.createElement("span");
+        ps.className = "entry-pain"; ps.textContent = "Pain " + e.pain + "/10";
+        li.appendChild(ps);
+      }
+      var note = document.createElement("span");
+      note.className = "entry-note"; note.textContent = e.note;
+      var when = document.createElement("span");
+      when.className = "entry-when"; when.textContent = fmt(e.date);
+      li.appendChild(note); li.appendChild(when);
+      list.appendChild(li);
+    });
+    $("clear").textContent = confirmClear ? "Tap again to erase all entries" : "Clear all entries";
+  }
+  dateEl.value = today();
+  dateEl.addEventListener("input", refreshSave);
+  noteEl.addEventListener("input", refreshSave);
+  saveEl.addEventListener("click", function () {
+    if (saveEl.disabled) return;
+    var entry = {
+      id: String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8),
+      areas: areas.slice(),
+      note: noteEl.value.trim(),
+      date: dateEl.value,
+      pain: pain,
+      savedAt: new Date().toISOString()
+    };
+    entries = [entry].concat(entries).sort(function (x, y) {
+      return y.date === x.date ? y.savedAt.localeCompare(x.savedAt) : y.date.localeCompare(x.date);
+    });
+    persist();
+    areas = []; pain = null; noteEl.value = "";
+    renderRegions(); renderScores(); renderPicked(); renderList(); refreshSave();
+  });
+  $("clear").addEventListener("click", function () {
+    if (!confirmClear) { confirmClear = true; renderList(); return; }
+    entries = []; confirmClear = false;
+    persist(); renderList();
+  });
+  renderRegions(); renderScores(); renderList(); refreshSave();
+})();
+</script>
+</body>
+</html>
