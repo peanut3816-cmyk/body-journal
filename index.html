@@ -24,8 +24,9 @@
             padding: 16px; margin-bottom: 16px; }
   h2 { font-size: 16px; margin: 0 0 12px; }
   .label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
-  input[type="date"], textarea { width: 100%; font: inherit; font-size: 16px; color: var(--ink);
+  input[type="date"], textarea { width: 100%; min-width: 0; font: inherit; font-size: 16px; color: var(--ink);
     border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
+  input[type="date"] { height: 46px; -webkit-appearance: none; appearance: none; }
   textarea { resize: vertical; }
   .region { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
   .region-head { width: 100%; display: flex; justify-content: space-between; align-items: center;
@@ -35,10 +36,6 @@
   .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 12px;
           font: inherit; font-size: 14px; color: var(--ink); cursor: pointer; }
   .chip.on { background: var(--teal-soft); border-color: var(--teal); color: var(--teal); font-weight: 600; }
-  .scores { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
-  .score { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 0;
-           font: inherit; font-size: 15px; color: var(--ink); cursor: pointer; }
-  .score.on { background: var(--teal-soft); border-color: var(--teal); color: var(--teal); font-weight: 700; }
   .picked { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; }
   .btn { display: inline-block; border: 0; border-radius: 10px; padding: 12px 18px; font: inherit;
          font-size: 15px; font-weight: 600; cursor: pointer; }
@@ -61,18 +58,23 @@
                font-size: 13px; text-decoration: underline; cursor: pointer; padding: 2px; }
   .empty { color: var(--ink-2); font-size: 14px; }
 
-  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .row2 > div { min-width: 0; }
   .row2 .label { margin-top: 0; }
-  select { width: 100%; font: inherit; font-size: 16px; color: var(--ink); border: 1px solid var(--line);
-           border-radius: 10px; padding: 10px 12px; background: #fff; }
+  select { width: 100%; min-width: 0; height: 46px; font: inherit; font-size: 16px; color: var(--ink);
+           border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
   .picker-toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px;
     border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 11px 12px; font: inherit;
     font-size: 15px; color: var(--ink); cursor: pointer; text-align: left; }
   .picker-toggle .sum { color: var(--ink-2); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: right; }
   .picker-panel { margin-top: 8px; }
-  .scores { display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px;
-            -webkit-overflow-scrolling: touch; }
-  .score { flex: 0 0 auto; min-width: 42px; scroll-snap-align: start; }
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--teal); height: 32px; cursor: pointer; }
+  .slider-val { min-width: 52px; text-align: center; font-size: 14px; font-weight: 700; color: var(--teal);
+    border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; background: #fff; }
+  .slider-val.unset { color: var(--ink-2); font-weight: 400; }
+  .slider-clear { border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 13px;
+    text-decoration: underline; cursor: pointer; padding: 4px 2px; }
   details.day { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; background: #fff; }
   details.day > summary { cursor: pointer; padding: 11px 12px; font-weight: 600; font-size: 15px; list-style: none;
     display: flex; justify-content: space-between; align-items: center; }
@@ -110,8 +112,12 @@
       <span>Body areas</span><span class="sum" id="psum">Tap to choose</span>
     </button>
     <div class="picker-panel" id="regions" hidden></div>
-    <span class="label">Pain score (optional): 0 none, 10 worst. Swipe for more.</span>
-    <div class="scores" id="scores" role="group" aria-label="Pain score from 0 to 10"></div>
+    <span class="label">Pain score (optional): drag the slider, 0 none to 10 worst</span>
+    <div class="slider-row">
+      <input id="pain" type="range" min="0" max="10" step="1" value="0" aria-label="Pain score from 0 to 10">
+      <span class="slider-val unset" id="painval">Not set</span>
+      <button type="button" class="slider-clear" id="painclear" hidden>Clear</button>
+    </div>
     <label class="label" for="note">What do you notice?</label>
     <textarea id="note" rows="3" maxlength="500" placeholder="e.g. Dull ache since this morning, worse after sitting"></textarea>
     <button class="btn btn-primary" id="save" disabled>Save entry</button>
@@ -251,18 +257,15 @@
       host.appendChild(box);
     });
   }
-  function renderScores() {
-    var host = $("scores");
-    host.innerHTML = "";
-    for (var n = 0; n <= 10; n++) (function (n) {
-      var b = document.createElement("button");
-      b.type = "button"; b.className = "score"; b.textContent = n;
-      b.setAttribute("aria-pressed", String(pain === n));
-      if (pain === n) b.classList.add("on");
-      b.addEventListener("click", function () { pain = (pain === n ? null : n); renderScores(); });
-      host.appendChild(b);
-    })(n);
+  var painEl = $("pain"), painValEl = $("painval"), painClearEl = $("painclear");
+  function renderPain() {
+    painEl.value = pain === null ? 0 : pain;
+    painValEl.textContent = pain === null ? "Not set" : pain + "/10";
+    painValEl.classList.toggle("unset", pain === null);
+    painClearEl.hidden = pain === null;
   }
+  painEl.addEventListener("input", function () { pain = Number(painEl.value); renderPain(); });
+  painClearEl.addEventListener("click", function () { pain = null; renderPain(); });
   function renderList() {
     var list = $("list");
     list.innerHTML = "";
@@ -346,14 +349,14 @@
     openDays[entry.date] = true;
     persist();
     areas = []; pain = null; noteEl.value = ""; todEl.value = nowTod();
-    renderRegions(); renderScores(); renderPicked(); renderList(); refreshSave();
+    renderRegions(); renderPain(); renderPicked(); renderList(); refreshSave();
   });
   $("clear").addEventListener("click", function () {
     if (!confirmClear) { confirmClear = true; renderList(); return; }
     entries = []; confirmClear = false;
     persist(); renderList();
   });
-  renderRegions(); renderScores(); renderList(); refreshSave();
+  renderRegions(); renderPain(); renderList(); refreshSave();
 })();
 </script>
 </body>
