@@ -85,6 +85,9 @@
   li.entry { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: 10px 0; margin: 0; }
   .entry-time { display: inline-block; font-size: 12px; color: var(--ink-2); margin-bottom: 2px; }
   footer { font-size: 12px; color: var(--ink-2); margin-top: 20px; }
+  .bkrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  #bkconfirm { margin-top: 10px; font-size: 14px; background: #fbfaf8; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  #bkconfirm .bkrow { margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -137,6 +140,18 @@
     <button class="btn btn-ghost" id="clear" hidden>Clear all entries</button>
   </section>
 
+  <section aria-labelledby="bk">
+    <h2 id="bk">Backup</h2>
+    <p class="hint">Entries live only in this browser on this device. Export a file to keep a copy you can restore later. A safety copy is also kept inside the app.</p>
+    <div class="bkrow">
+      <button class="btn btn-ghost" id="bkexport" type="button">Export backup</button>
+      <button class="btn btn-ghost" id="bkimport" type="button">Restore backup</button>
+    </div>
+    <input type="file" id="bkfile" accept="application/json,.json" hidden>
+    <div id="bkconfirm" hidden></div>
+    <p class="hint" id="bkstatus"></p>
+  </section>
+
   <footer>Prototype updated 24 Oct 2026. Nothing here is sent anywhere.</footer>
 </main>
 
@@ -144,6 +159,7 @@
 (function () {
   "use strict";
   var LS_KEY = "body-journal.entries.v2";
+  var SNAP_KEY = "body-journal.snapshot.v1";
   var REGIONS = [
     { label: "Head and neck", parts: [["Head",0],["Face",0],["Jaw",1],["Neck (front)",0],["Neck (back)",0]] },
     { label: "Shoulders and arms", parts: [["Shoulder",1],["Upper arm",1],["Elbow",1],["Forearm",1],["Wrist",1],["Hand",1],["Fingers",1]] },
@@ -152,6 +168,7 @@
     { label: "Feet", parts: [["Ankle",1],["Top of foot",1],["Arch",1],["Heel",1],["Toes",1]] },
     { label: "Other", parts: [["Whole body",0],["Somewhere else",0]] }
   ];
+  var recoveredFromSnap = false;
   var entries = load();
   var areas = [], pain = null, confirmClear = false;
   var $ = function (id) { return document.getElementById(id); };
@@ -159,20 +176,45 @@
   var TODS = [["early-morning","Early morning"],["late-morning","Late morning"],["early-afternoon","Early afternoon"],["late-afternoon","Late afternoon"],["evening","Evening"],["night","Night"]];
   var openDays = {}, panelOpen = false, seeded = false;
 
+  function validEntry(e) {
+    return e && typeof e.id === "string" && Array.isArray(e.areas) &&
+           typeof e.note === "string" && typeof e.date === "string";
+  }
+  function loadSnap() {
+    try {
+      var s = JSON.parse(window.localStorage.getItem(SNAP_KEY) || "null");
+      if (s && Array.isArray(s.entries)) return s.entries.filter(validEntry);
+    } catch (err) {}
+    return null;
+  }
   function load() {
     try {
       var raw = window.localStorage.getItem(LS_KEY);
-      if (!raw) return [];
-      var parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter(function (e) {
-        return e && typeof e.id === "string" && Array.isArray(e.areas) &&
-               typeof e.note === "string" && typeof e.date === "string";
-      });
-    } catch (err) { return []; }
+      if (raw != null) {
+        try {
+          var parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.filter(validEntry);
+        } catch (err) {
+          var snap = loadSnap();
+          if (snap) { recoveredFromSnap = true; return snap; }
+        }
+      }
+    } catch (err) {}
+    return [];
   }
+  var persistFailed = false;
   function persist() {
-    try { window.localStorage.setItem(LS_KEY, JSON.stringify(entries)); } catch (err) {}
+    try {
+      window.localStorage.setItem(LS_KEY, JSON.stringify(entries));
+      window.localStorage.setItem(SNAP_KEY, JSON.stringify({ t: Date.now(), entries: entries }));
+      persistFailed = false;
+    } catch (err) {
+      if (!persistFailed) {
+        persistFailed = true;
+        var st = $("bkstatus");
+        if (st) st.textContent = "Couldn't save. Browser storage may be full - export a backup below.";
+      }
+    }
   }
   function today() {
     var d = new Date();
@@ -357,6 +399,76 @@
     persist(); renderList();
   });
   renderRegions(); renderPain(); renderList(); refreshSave();
+
+  if (recoveredFromSnap) {
+    persist();
+    $("bkstatus").textContent = "Recovered your entries from the in-app safety copy.";
+  }
+
+  function fmtWhen(t) {
+    try { return new Date(t).toLocaleString("en-NZ", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); }
+    catch (err) { return ""; }
+  }
+  $("bkexport").addEventListener("click", function () {
+    var data = { app: "body-journal", version: 1, exportedAt: new Date().toISOString(), entries: entries };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "body-journal-backup-" + today() + ".json";
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    $("bkstatus").textContent = "Backup file downloaded. Keep it somewhere safe, like the Files app.";
+  });
+  var pendingRestore = null, preRestore = null;
+  $("bkimport").addEventListener("click", function () { $("bkfile").click(); });
+  $("bkfile").addEventListener("change", function () {
+    var f = this.files && this.files[0]; this.value = "";
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      var box = $("bkconfirm");
+      try {
+        var data = JSON.parse(r.result);
+        if (!data || !Array.isArray(data.entries)) throw new Error("bad");
+        var clean = data.entries.filter(validEntry);
+        pendingRestore = clean;
+        var when = data.exportedAt ? " from " + fmtWhen(data.exportedAt) : "";
+        box.innerHTML = "";
+        box.appendChild(document.createTextNode("This backup" + when + " has " + clean.length + " entr" + (clean.length === 1 ? "y" : "ies") + ". Restoring replaces the entries currently saved."));
+        var row = document.createElement("div"); row.className = "bkrow";
+        var yes = document.createElement("button"); yes.type = "button"; yes.className = "btn btn-ghost"; yes.textContent = "Restore";
+        var no = document.createElement("button"); no.type = "button"; no.className = "btn btn-ghost"; no.textContent = "Cancel";
+        yes.addEventListener("click", function () {
+          box.hidden = true;
+          if (!pendingRestore) return;
+          preRestore = entries;
+          entries = pendingRestore; pendingRestore = null;
+          confirmClear = false;
+          persist(); renderList();
+          var st = $("bkstatus");
+          st.innerHTML = "";
+          st.appendChild(document.createTextNode("Backup restored. "));
+          var undo = document.createElement("button");
+          undo.type = "button"; undo.className = "slider-clear"; undo.textContent = "Undo restore";
+          undo.addEventListener("click", function () {
+            if (!preRestore) return;
+            entries = preRestore; preRestore = null;
+            persist(); renderList();
+            st.textContent = "Restore undone.";
+          });
+          st.appendChild(undo);
+        });
+        no.addEventListener("click", function () { box.hidden = true; pendingRestore = null; });
+        row.appendChild(yes); row.appendChild(no);
+        box.appendChild(row);
+        box.hidden = false;
+      } catch (err) {
+        box.textContent = "That file doesn't look like a body journal backup.";
+        box.hidden = false;
+      }
+    };
+    r.readAsText(f);
+  });
 })();
 </script>
 </body>
