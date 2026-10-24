@@ -188,25 +188,27 @@
     return null;
   }
   function load() {
-    try {
-      var raw = window.localStorage.getItem(LS_KEY);
-      if (raw != null) {
-        try {
-          var parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) return parsed.filter(validEntry);
-        } catch (err) {
-          var snap = loadSnap();
-          if (snap) { recoveredFromSnap = true; return snap; }
-        }
+    var raw = null;
+    try { raw = window.localStorage.getItem(LS_KEY); } catch (err) { raw = null; }
+    if (raw != null) {
+      try {
+        var parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter(validEntry);
+      } catch (err) {
+        var snap = loadSnap();
+        if (snap) { recoveredFromSnap = true; return snap; }
       }
-    } catch (err) {}
+    } else {
+      var snap2 = loadSnap();
+      if (snap2 && snap2.length) { recoveredFromSnap = true; return snap2; }
+    }
     return [];
   }
   var persistFailed = false;
   function persist() {
     try {
-      window.localStorage.setItem(LS_KEY, JSON.stringify(entries));
       window.localStorage.setItem(SNAP_KEY, JSON.stringify({ t: Date.now(), entries: entries }));
+      window.localStorage.setItem(LS_KEY, JSON.stringify(entries));
       persistFailed = false;
     } catch (err) {
       if (!persistFailed) {
